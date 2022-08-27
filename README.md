@@ -61,8 +61,8 @@ This script will perform the following actions
 ```
 Example:
 ```powershell
-New-MMDEnrollmentAVD-PublicPreview.ps1 “Azure AD Device ID”
+New-MMDEnrollmentAVDPublicPreview.ps1 “Azure AD Device ID”
 
-New-MMDEnrollmentAVD-PublicPreview.ps1 “33e84f7e-e6ee-4904-8767-24d442d270a2”
+New-MMDEnrollmentAVDPublicPreview.ps1 “33e84f7e-e6ee-4904-8767-24d442d270a2”
 ```
 

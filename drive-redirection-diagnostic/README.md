@@ -35,6 +35,32 @@ Optional — pull the authoritative custom RDP properties straight from Azure
 
 Read-only. It never resets a profile or edits RDP properties.
 
+## Microsoft Learn links
+
+Every blocking finding and most warnings print a **Microsoft Learn link that resolves
+that specific finding**, in magenta under the finding and again as a de-duplicated list
+in the summary. The same list is in the JSON under `DocLinks`, and each entry in
+`Blocking` / `Warnings` carries its own `Fix:` / `Ref:` URL — so a ticket gets the
+remedy, not just the symptom.
+
+Mapping:
+
+| Finding | Learn page |
+|---|---|
+| `fDisableCdm = 1` / redirection policy | [Configure drive redirection via Intune or Group Policy](https://learn.microsoft.com/azure/virtual-desktop/redirection-configure-drives-storage#configure-drive-redirection-using-microsoft-intune-or-group-policy) |
+| Other `fDisable*` policy values | [RemoteDesktopServices Policy CSP](https://learn.microsoft.com/windows/client-management/mdm/policy-csp-remotedesktopservices#donotallowdriveredirection) |
+| Empty / partial `drivestoredirect` | [Configure drive redirection via host pool RDP properties](https://learn.microsoft.com/azure/virtual-desktop/redirection-configure-drives-storage#configure-drive-redirection-using-host-pool-rdp-properties) |
+| RDP property syntax / values | [Supported RDP properties](https://learn.microsoft.com/azure/virtual-desktop/rdp-properties#drivestoredirect) |
+| No properties found locally | [Set custom RDP properties on a host pool](https://learn.microsoft.com/azure/virtual-desktop/customize-rdp-properties) |
+| RDPDR / `UmRdpService` | [Redirection over RDP](https://learn.microsoft.com/azure/virtual-desktop/redirection-remote-desktop-protocol) |
+| FSLogix profile unhealthy | [FSLogix logging and diagnostics](https://learn.microsoft.com/fslogix/troubleshooting-events-logs-diagnostics) |
+| FSLogix error events | [FSLogix known issues](https://learn.microsoft.com/fslogix/troubleshooting-known-issues) |
+| Cloud Cache in use | [Cloud Cache containers](https://learn.microsoft.com/fslogix/tutorial-cloud-cache-containers) |
+| RemoteApp mode | [Publish applications as RemoteApp](https://learn.microsoft.com/azure/virtual-desktop/publish-applications-stream-remoteapp) |
+
+All verified HTTP 200 at time of writing. Microsoft moves docs — if one 404s, the anchor
+is the part most likely to have changed, not the page.
+
 Output: console summary (green/yellow/red) plus a full JSON report at
 `C:\ProgramData\AvdDriveCheck\latest.json`. Send that JSON back for analysis.
 

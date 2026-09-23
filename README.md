@@ -24,7 +24,9 @@ host-side Terminal Services policy including values set locally rather than by G
 RDPDR channel and `UmRdpService`, FSLogix container health (`Profile_Status.txt`, Cloud
 Cache, stale `Terminal Server Client` keys), and RemoteApp vs full-desktop mode. Writes a
 console summary plus `C:\ProgramData\AvdDriveCheck\latest.json`; exits `1` on any blocking
-finding. Changes nothing. See the folder's own README for detail and known limits.
+finding. Every blocking finding prints the Microsoft Learn page that resolves it, and the
+links are collected in the JSON under `DocLinks`. Changes nothing. See the folder's own
+README for detail and known limits.
 
 ### `HEVC444.bat`
 Toggles the **HEVC 4:4:4 private preview** on and off. Interactive `1` = enable,

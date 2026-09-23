@@ -57,8 +57,44 @@ $script:Blocking = New-Object System.Collections.Generic.List[string]
 $script:Warnings = New-Object System.Collections.Generic.List[string]
 $script:Info     = [ordered]@{}
 
-function Add-Blocking { param([string]$m) $script:Blocking.Add($m); Write-Host "  [BLOCK] $m" -ForegroundColor Red }
-function Add-Warning2 { param([string]$m) $script:Warnings.Add($m); Write-Host "  [WARN ] $m" -ForegroundColor Yellow }
+# Microsoft Learn references, keyed by finding topic. Printed next to the finding and
+# emitted in the JSON so a ticket carries the fix link, not just the symptom.
+$script:Docs = @{
+    DriveRedirectionPolicy = 'https://learn.microsoft.com/azure/virtual-desktop/redirection-configure-drives-storage#configure-drive-redirection-using-microsoft-intune-or-group-policy'
+    PolicyCsp              = 'https://learn.microsoft.com/windows/client-management/mdm/policy-csp-remotedesktopservices#donotallowdriveredirection'
+    RdpProperties          = 'https://learn.microsoft.com/azure/virtual-desktop/rdp-properties#drivestoredirect'
+    CustomizeRdp           = 'https://learn.microsoft.com/azure/virtual-desktop/customize-rdp-properties'
+    HostPoolDriveSetting   = 'https://learn.microsoft.com/azure/virtual-desktop/redirection-configure-drives-storage#configure-drive-redirection-using-host-pool-rdp-properties'
+    FSLogixTroubleshooting = 'https://learn.microsoft.com/fslogix/troubleshooting-events-logs-diagnostics'
+    FSLogixKnownIssues     = 'https://learn.microsoft.com/fslogix/troubleshooting-known-issues'
+    FSLogixCloudCache      = 'https://learn.microsoft.com/fslogix/tutorial-cloud-cache-containers'
+    RemoteApp              = 'https://learn.microsoft.com/azure/virtual-desktop/publish-applications-stream-remoteapp'
+    RedirectionOverview    = 'https://learn.microsoft.com/azure/virtual-desktop/redirection-remote-desktop-protocol'
+}
+
+$script:DocLinks = New-Object System.Collections.Generic.List[string]
+
+function Resolve-Doc {
+    param([string]$Key)
+    if ($Key -and $script:Docs.ContainsKey($Key)) { return $script:Docs[$Key] }
+    return $null
+}
+
+function Add-Blocking {
+    param([string]$m, [string]$Doc)
+    $u = Resolve-Doc $Doc
+    $script:Blocking.Add($(if ($u) { "$m`n     Fix: $u" } else { $m }))
+    Write-Host "  [BLOCK] $m" -ForegroundColor Red
+    if ($u) { Write-Host "          Fix: $u" -ForegroundColor Magenta; if (-not $script:DocLinks.Contains($u)) { $script:DocLinks.Add($u) } }
+}
+
+function Add-Warning2 {
+    param([string]$m, [string]$Doc)
+    $u = Resolve-Doc $Doc
+    $script:Warnings.Add($(if ($u) { "$m`n     Ref: $u" } else { $m }))
+    Write-Host "  [WARN ] $m" -ForegroundColor Yellow
+    if ($u) { Write-Host "          Ref: $u" -ForegroundColor DarkMagenta; if (-not $script:DocLinks.Contains($u)) { $script:DocLinks.Add($u) } }
+}
 function Add-Ok       { param([string]$m) Write-Host "  [ OK  ] $m" -ForegroundColor Green }
 function Section      { param([string]$t) Write-Host ""; Write-Host "=== $t ===" -ForegroundColor Cyan }
 
@@ -149,7 +185,7 @@ if ($HostPoolName -and $ResourceGroup) {
 $rdpToParse = if ($rdpFromAzure) { $rdpFromAzure } elseif ($effectiveRdp) { $effectiveRdp } else { $null }
 
 if (-not $rdpToParse) {
-    Add-Warning2 'No custom RDP property string found locally. Confirm in Azure Portal -> Host Pool -> RDP Properties -> Advanced, or re-run with -HostPoolName/-ResourceGroup.'
+    Add-Warning2 'No custom RDP property string found locally. Confirm in Azure Portal -> Host Pool -> RDP Properties -> Advanced, or re-run with -HostPoolName/-ResourceGroup.' -Doc CustomizeRdp
 } else {
     Write-Host "  Raw: $rdpToParse" -ForegroundColor DarkGray
     $pairs = @{}
@@ -162,11 +198,11 @@ if (-not $rdpToParse) {
     if ($pairs.ContainsKey('drivestoredirect')) {
         $v = $pairs['drivestoredirect']
         if ([string]::IsNullOrWhiteSpace($v)) {
-            Add-Blocking 'drivestoredirect:s: is present and EMPTY -> all drive redirection is blocked at the host pool. This overrides the GUI "Redirect all disk drives" setting. Remove it, or set drivestoredirect:s:*'
+            Add-Blocking 'drivestoredirect:s: is present and EMPTY -> all drive redirection is blocked at the host pool. This overrides the GUI "Redirect all disk drives" setting. Remove it, or set drivestoredirect:s:*' -Doc HostPoolDriveSetting
         } elseif ($v -eq '*') {
             Add-Ok 'drivestoredirect:s:* -> all drives redirected (correct).'
         } else {
-            Add-Warning2 "drivestoredirect:s:$v -> only these specific drives redirect. Dynamically-connected/hot-plugged drives will NOT appear. Set to * for 'all drives including ones connected later'."
+            Add-Warning2 "drivestoredirect:s:$v -> only these specific drives redirect. Dynamically-connected/hot-plugged drives will NOT appear. Set to * for 'all drives including ones connected later'." -Doc RdpProperties
         }
     } else {
         Add-Ok 'No drivestoredirect override in custom RDP properties.'
@@ -176,18 +212,18 @@ if (-not $rdpToParse) {
         if ($pairs.ContainsKey($k)) {
             $v = $pairs[$k]
             if ($v -eq '0') {
-                if ($k -eq 'redirectdrives') { Add-Blocking "redirectdrives:i:0 present -> drive redirection explicitly disabled at the host pool. Remove it." }
-                else { Add-Warning2 "$($k):i:0 present. Not the drive channel itself, but RDPDR carries COM/smartcard/printer too; a disabled sibling plus a RemoteApp can stall the device-redirection negotiation. Remove unless deliberate." }
+                if ($k -eq 'redirectdrives') { Add-Blocking "redirectdrives:i:0 present -> drive redirection explicitly disabled at the host pool. Remove it." -Doc HostPoolDriveSetting }
+                else { Add-Warning2 "$($k):i:0 present. Not the drive channel itself, but RDPDR carries COM/smartcard/printer too; a disabled sibling plus a RemoteApp can stall the device-redirection negotiation. Remove unless deliberate." -Doc RdpProperties }
             } else {
                 Add-Ok "$($k):i:$v"
             }
         }
     }
 
-    if ($pairs.ContainsKey('devicestoredirect')) { Add-Warning2 "devicestoredirect:s:$($pairs['devicestoredirect']) present - review." }
+    if ($pairs.ContainsKey('devicestoredirect')) { Add-Warning2 "devicestoredirect:s:$($pairs['devicestoredirect']) present - review." -Doc RdpProperties }
     if ($pairs.ContainsKey('remoteapplicationmode') -and $pairs['remoteapplicationmode'] -eq '1') {
         $script:Info.RemoteAppModeInRdp = $true
-        Add-Warning2 'remoteapplicationmode:i:1 -> connections are RemoteApp. See section 5.'
+        Add-Warning2 'remoteapplicationmode:i:1 -> connections are RemoteApp. See section 5.' -Doc RemoteApp
     }
 }
 
@@ -215,9 +251,9 @@ foreach ($h in $hives) {
         if ($null -ne $v) {
             $polFound["$($h.Label)::$k"] = $v
             if ($k -eq 'fDisableCdm' -and $v -eq 1) {
-                Add-Blocking "$($h.Label): fDisableCdm = 1 -> $($policyMap[$k]) is DISABLED on this session host. This blocks drives regardless of client or host pool settings. ($($h.Path))"
+                Add-Blocking "$($h.Label): fDisableCdm = 1 -> $($policyMap[$k]) is DISABLED on this session host. This blocks drives regardless of client or host pool settings. ($($h.Path))" -Doc DriveRedirectionPolicy
             } elseif ($k -ne 'fDisableCdm' -and $v -eq 1 -and $k -like 'fDisable*') {
-                Add-Warning2 "$($h.Label): $k = 1 -> $($policyMap[$k]) disabled."
+                Add-Warning2 "$($h.Label): $k = 1 -> $($policyMap[$k]) disabled." -Doc PolicyCsp
             } else {
                 Add-Ok "$($h.Label): $k = $v"
             }
@@ -236,7 +272,7 @@ $script:Info.RdpdrService = if ($rdpdr) { "$($rdpdr.Status)/$($rdpdr.StartType)"
 
 if ($drv) {
     if ($drv.State -eq 'Running') { Add-Ok "rdpdr driver: $($drv.State) (start=$($drv.StartMode))" }
-    else { Add-Blocking "rdpdr driver is $($drv.State) (start=$($drv.StartMode)) -> the device-redirection channel cannot open. Expect RemoteApp to hang and no drives." }
+    else { Add-Blocking "rdpdr driver is $($drv.State) (start=$($drv.StartMode)) -> the device-redirection channel cannot open. Expect RemoteApp to hang and no drives." -Doc RedirectionOverview }
 } elseif ($rdpdr) {
     if ($rdpdr.Status -eq 'Running') { Add-Ok "rdpdr service: Running" } else { Add-Blocking "rdpdr service is $($rdpdr.Status)." }
 } else {
@@ -247,7 +283,7 @@ $umrdp = Get-Service -Name 'UmRdpService' -ErrorAction SilentlyContinue
 if ($umrdp) {
     $script:Info.UmRdpService = "$($umrdp.Status)/$($umrdp.StartType)"
     if ($umrdp.Status -eq 'Running') { Add-Ok 'UmRdpService (Remote Desktop Services UserMode Port Redirector): Running' }
-    else { Add-Blocking "UmRdpService is $($umrdp.Status) (start=$($umrdp.StartType)) -> drive/port redirection will not work. It must be Running/Manual-triggered." }
+    else { Add-Blocking "UmRdpService is $($umrdp.Status) (start=$($umrdp.StartType)) -> drive/port redirection will not work. It must be Running/Manual-triggered." -Doc RedirectionOverview }
 }
 
 # Does a redirected-drive device actually exist right now?
@@ -279,14 +315,14 @@ $fslKey = 'HKLM:\SOFTWARE\FSLogix\Profiles'
 $fslEnabled = Get-RegValue -Path $fslKey -Name 'Enabled'
 $script:Info.FSLogixEnabled = $fslEnabled
 if ($null -eq $fslEnabled) {
-    Add-Warning2 'FSLogix Profiles key not found - FSLogix may not be installed on this host.'
+    Add-Warning2 'FSLogix Profiles key not found - FSLogix may not be installed on this host.' -Doc FSLogixTroubleshooting
 } else {
     $vhdLoc = Get-RegValue -Path $fslKey -Name 'VHDLocations'
     $ccLoc  = Get-RegValue -Path $fslKey -Name 'CCDLocations'
     $script:Info.FSLogixVHDLocations = $vhdLoc
     $script:Info.FSLogixCloudCache   = $ccLoc
     Add-Ok "FSLogix Enabled=$fslEnabled; VHDLocations=$($vhdLoc -join ',')$(if($ccLoc){"; CloudCache=$($ccLoc -join ',')"})"
-    if ($ccLoc) { Add-Warning2 'Cloud Cache is in use. Cloud Cache lengthens profile load; a slow load is a common cause of RemoteApp spinning before the RDPDR channel is usable.' }
+    if ($ccLoc) { Add-Warning2 'Cloud Cache is in use. Cloud Cache lengthens profile load; a slow load is a common cause of RemoteApp spinning before the RDPDR channel is usable.' -Doc FSLogixCloudCache }
 
     $fslSvc = Get-Service -Name 'frxsvc' -ErrorAction SilentlyContinue
     if ($fslSvc) {
@@ -317,7 +353,7 @@ if ($null -eq $fslEnabled) {
         $statusReport += [pscustomobject]@{ Path = $f.FullName; Modified = $f.LastWriteTime; Text = $txt }
         $bad = @('LoadTimeExceeded','MountPointError','Locked','Corrupt','Error','Failed') | Where-Object { $txt -match $_ }
         if ($bad) {
-            Add-Blocking "FSLogix $($f.FullName) reports: $($bad -join ', ') -> profile container is unhealthy. Reset it (log off, delete local profile folder + the user's VHD(X), let FSLogix recreate)."
+            Add-Blocking "FSLogix $($f.FullName) reports: $($bad -join ', ') -> profile container is unhealthy. Reset it (log off, delete local profile folder + the user's VHD(X), let FSLogix recreate)." -Doc FSLogixTroubleshooting
         } else {
             Add-Ok "FSLogix status file clean: $($f.FullName)"
         }
@@ -330,7 +366,7 @@ if ($null -eq $fslEnabled) {
         $fslEv = Get-WinEvent -FilterHashtable @{ LogName='Microsoft-FSLogix-Apps/Operational'; StartTime=(Get-Date).AddDays(-2); Level=1,2,3 } -ErrorAction Stop |
                  Select-Object -First 20
         $script:Info.FSLogixEvents = @($fslEv | ForEach-Object { "$($_.TimeCreated.ToString('s')) [$($_.LevelDisplayName)] $($_.Id): $(($_.Message -split "`n")[0])" })
-        if ($fslEv) { Add-Warning2 "$(@($fslEv).Count) FSLogix warning/error events in the last 48h (see JSON)." } else { Add-Ok 'No FSLogix errors in the last 48h.' }
+        if ($fslEv) { Add-Warning2 "$(@($fslEv).Count) FSLogix warning/error events in the last 48h (see JSON)." -Doc FSLogixKnownIssues } else { Add-Ok 'No FSLogix errors in the last 48h.' }
     } catch { Add-Warning2 'FSLogix operational log not available.' }
 
     # Stale Terminal Server Client keys in the loaded user hive
@@ -342,7 +378,7 @@ if ($null -eq $fslEnabled) {
                 if (Test-Path $tscPath) {
                     $tsc = Get-ChildItem $tscPath -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
                     $script:Info.UserTerminalServerClientKeys = @($tsc)
-                    Add-Warning2 "User hive has Terminal Server Client keys ($(@($tsc).Count) subkeys). Stale entries here are a known cause of a hung RemoteApp after a profile is roamed between hosts."
+                    Add-Warning2 "User hive has Terminal Server Client keys ($(@($tsc).Count) subkeys). Stale entries here are a known cause of a hung RemoteApp after a profile is roamed between hosts." -Doc FSLogixTroubleshooting
                 } else { Add-Ok 'No stale Terminal Server Client keys in the user hive.' }
             } else { Add-Warning2 "No loaded profile found for '$UserName' on this host." }
         } catch { }
@@ -355,7 +391,7 @@ Section '5. RemoteApp vs full desktop (blocker #3)'
 $railProcs = Get-Process -Name 'rdpshell','rdpinit' -ErrorAction SilentlyContinue
 $script:Info.RailProcesses = @($railProcs | ForEach-Object { "$($_.Name) (pid $($_.Id), session $($_.SessionId))" })
 if ($railProcs | Where-Object Name -eq 'rdpshell') {
-    Add-Warning2 'rdpshell.exe is running -> at least one RemoteApp (RAIL) session is active on this host. RemoteApp is where the "spinning, no drives" symptom concentrates.'
+    Add-Warning2 'rdpshell.exe is running -> at least one RemoteApp (RAIL) session is active on this host. RemoteApp is where the "spinning, no drives" symptom concentrates.' -Doc RemoteApp
 } elseif ($railProcs | Where-Object Name -eq 'rdpinit') {
     Add-Warning2 'rdpinit.exe running -> session starting in RemoteApp mode.'
 } else {
@@ -364,7 +400,7 @@ if ($railProcs | Where-Object Name -eq 'rdpshell') {
 
 if ($script:Info.HostPoolPreferredApp) {
     if ($script:Info.HostPoolPreferredApp -eq 'RailApplications') {
-        Add-Warning2 "Host pool preferredAppGroupType = RailApplications (RemoteApp). If drives work in a full desktop from the same pool, the redirection MODE is the incompatibility - set drive redirection to plain 'Enabled' (drivestoredirect:s:*) rather than a dynamic/hot-plug mode."
+        Add-Warning2 "Host pool preferredAppGroupType = RailApplications (RemoteApp). If drives work in a full desktop from the same pool, the redirection MODE is the incompatibility - set drive redirection to plain 'Enabled' (drivestoredirect:s:*) rather than a dynamic/hot-plug mode." -Doc HostPoolDriveSetting
     } else {
         Add-Ok "Host pool preferredAppGroupType = $($script:Info.HostPoolPreferredApp)"
     }
@@ -382,7 +418,7 @@ try {
             LPTPortRedirection       = $ts.LPTPortRedirection
             ClipboardRedirection     = $ts.ClipboardMapping
         }
-        if ($ts.DriveRedirection -eq 1) { Add-Blocking 'Win32_TSClientSetting.DriveRedirection = 1 (disabled) on this host.' }
+        if ($ts.DriveRedirection -eq 1) { Add-Blocking 'Win32_TSClientSetting.DriveRedirection = 1 (disabled) on this host.' -Doc DriveRedirectionPolicy }
         else { Add-Ok 'Win32_TSClientSetting reports drive redirection is not disabled.' }
     }
 } catch { }
@@ -403,6 +439,7 @@ $result = [ordered]@{
     WarningCount  = $script:Warnings.Count
     Blocking      = @($script:Blocking)
     Warnings      = @($script:Warnings)
+    DocLinks      = @($script:DocLinks)
     Details       = $script:Info
 }
 
@@ -417,6 +454,13 @@ if ($script:Blocking.Count -gt 0) {
 } else {
     Write-Host "No blocking findings. Review the $($script:Warnings.Count) warning(s) above." -ForegroundColor Green
 }
+
+if ($script:DocLinks.Count -gt 0) {
+    Write-Host ""
+    Write-Host "MICROSOFT LEARN - resolve the findings above:" -ForegroundColor Cyan
+    $i = 1; foreach ($u in $script:DocLinks) { Write-Host "  $i. $u" -ForegroundColor Magenta; $i++ }
+}
+
 Write-Host ""
 Write-Host "Full report: $OutputPath" -ForegroundColor White
 Write-Host "Send that JSON back for analysis." -ForegroundColor White

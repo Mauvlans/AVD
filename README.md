@@ -28,6 +28,23 @@ finding. Every blocking finding prints the Microsoft Learn page that resolves it
 links are collected in the JSON under `DocLinks`. Changes nothing. See the folder's own
 README for detail and known limits.
 
+### `redirection-apply/`
+Interactive script to **enable or disable RDP redirections** (drive, clipboard, printer,
+PnP) across AVD host pools and Windows 365 Cloud PCs. Device-code auth, per-change
+confirmation showing BEFORE → AFTER, every write verified by reading it back from the API.
+
+```powershell
+.\Set-AvdW365Redirection.ps1 -DryRun    # show what would change, write nothing
+.\Set-AvdW365Redirection.ps1            # interactive, confirm each change
+```
+
+Handles **both** gates, because the most restrictive one wins: the OS policy
+(`fDisableCdm` et al, via Intune) *and* the AVD host pool RDP properties. Setting only
+the host pool property is the most common reason "I enabled drive redirection and nothing
+changed." Note that Windows 365 provisioning policies contain no redirection settings at
+all — W365 is Intune/GPO only. Ships with a 17-case offline test suite pinning the
+"Do not allow…" policy inversion. See the folder README for the full limits list.
+
 ### `HEVC444.bat`
 Toggles the **HEVC 4:4:4 private preview** on and off. Interactive `1` = enable,
 `2` = disable. Enables hardware encode preference, sets `EnableHEVC444Threshold`, and

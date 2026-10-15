@@ -45,6 +45,17 @@ changed." Note that Windows 365 provisioning policies contain no redirection set
 all — W365 is Intune/GPO only. Ships with a 17-case offline test suite pinning the
 "Do not allow…" policy inversion. See the folder README for the full limits list.
 
+### `context-redirection-check/`
+Read-only check you run **inside the session** to show which redirections (clipboard,
+drives, printers, PnP/USB) it actually received, and whether device policy is blocking
+them. Built for demoing **context-based redirection** (preview): run it from a compliant
+device and you should see all green, from BYOD you should see red. Flags the Windows 365
+secure-by-default block that stops context-based redirection from ever allowing anything.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Show-RedirectionState.ps1
+```
+
 ### `HEVC444.bat`
 Toggles the **HEVC 4:4:4 private preview** on and off. Interactive `1` = enable,
 `2` = disable. Enables hardware encode preference, sets `EnableHEVC444Threshold`, and

@@ -47,6 +47,14 @@ if ($out -match 'Join-Path \$PSScriptRoot ''lib''') { throw "Built file still do
 $distDir = Join-Path $root 'dist'
 New-Item -ItemType Directory -Path $distDir -Force | Out-Null
 $dest = Join-Path $distDir 'Invoke-FeatureValidator.ps1'
-# UTF-8 with BOM so Windows PowerShell 5.1 reads non-ASCII text correctly.
-[IO.File]::WriteAllText($dest, $out, (New-Object System.Text.UTF8Encoding($true)))
+# Must be pure ASCII and written WITHOUT a BOM:
+#  - Windows PowerShell 5.1 reads BOM-less files as ANSI, which is only safe for ASCII.
+#  - irm returns a leading U+FEFF when a BOM is present, and [scriptblock]::Create then fails
+#    to recognise the <# help #> block and the whole script stops parsing.
+$nonAscii = [regex]::Matches($out, '[^\x00-\x7F]')
+if ($nonAscii.Count) {
+    $line = ($out.Substring(0, $nonAscii[0].Index) -split "`n").Count
+    throw "Built file contains non-ASCII character U+$('{0:X4}' -f [int][char]$nonAscii[0].Value) at line $line. Replace it in the source."
+}
+[IO.File]::WriteAllText($dest, $out, (New-Object System.Text.UTF8Encoding($false)))
 Write-Host "Built $dest ($([math]::Round((Get-Item $dest).Length / 1KB, 1)) KB)" -ForegroundColor Green

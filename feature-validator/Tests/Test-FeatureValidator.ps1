@@ -144,7 +144,17 @@ foreach ($t in $targets.Keys) {
     Assert-Equal "[$t] termservice: REDIR-010 Fail (missing)" 'Fail' (Get-StatusOf $s.Report 'REDIR-010')
 }
 
-Write-Host "`nSingle file via scriptblock (irm | iex style)" -ForegroundColor Cyan
+Write-Host "`nSingle file is safe to download and run" -ForegroundColor Cyan
+$bytes = [IO.File]::ReadAllBytes($dist)
+Assert-Equal 'dist has no UTF-8 BOM (breaks irm + scriptblock)' $false ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+Assert-Equal 'dist is pure ASCII (safe for PowerShell 5.1)' 0 (@($bytes | Where-Object { $_ -gt 127 }).Count)
+# Parse exactly what irm would hand over: the raw bytes decoded without BOM stripping.
+$asDownloaded = (New-Object System.Text.UTF8Encoding($false)).GetString($bytes)
+$parsed = $true
+try { [scriptblock]::Create($asDownloaded) | Out-Null } catch { $parsed = $false }
+Assert-Equal 'dist parses as a downloaded string' $true $parsed
+
+Write-Host "`nSingle file via scriptblock (irm style)" -ForegroundColor Cyan
 $fx = Join-Path (Join-Path $PSScriptRoot 'fixtures') 'w365-secure-default.json'
 $out = Join-Path $tmp 'sb.json'
 $probe = "& ([scriptblock]::Create([IO.File]::ReadAllText('$dist'))) -Fixture '$fx' -OutputPath '$out' -NoColor *> `$null; 'alive'; `$LASTEXITCODE"

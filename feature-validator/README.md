@@ -127,8 +127,9 @@ pwsh -File .\Tests\Test-FeatureValidator.ps1
 ```
 
 The build only inlines catalog files that load through `Import-PowerShellDataFile`
-(data-only: no commands or variables), checks the result parses, and writes UTF-8 with a BOM
-so Windows PowerShell 5.1 reads it correctly. The tests fail if `dist/` is stale (engine,
+(data-only: no commands or variables), checks the result parses, and writes pure ASCII with **no BOM**.
+A BOM breaks `irm` + `[scriptblock]::Create`, and non-ASCII text breaks Windows PowerShell 5.1;
+the build refuses both. The tests fail if `dist/` is stale (engine,
 any check file or the main script out of sync), so you can't forget to rebuild.
 
 ## Tests
@@ -137,10 +138,10 @@ any check file or the main script out of sync), so you can't forget to rebuild.
 pwsh -File .\Tests\Test-FeatureValidator.ps1
 ```
 
-73 offline tests covering catalog schema, expectation logic (including the inverted
+76 offline tests covering catalog schema, expectation logic (including the inverted
 "Do not allow… = 1 means blocked"), status → colour/exit-code mapping, five end-to-end
 fixture scenarios in `Tests/fixtures/` run against **both** the repo script and the single
-file, dist freshness, and the scriptblock form (doesn't close the host, sets
+file, dist freshness, no-BOM/ASCII/parses-as-downloaded, and the scriptblock form (doesn't close the host, sets
 `$LASTEXITCODE`). A deliberately inverted `NotEqual`
 makes 13 of them fail, so they do catch the mistake they exist for.
 

@@ -1,6 +1,6 @@
 # feature-validator — plan
 
-Status: **plan only**. Nothing here runs yet.
+Status: **milestone 1 shipped** (engine, catalog schema, redirection checks, offline tests). See [README.md](README.md). Milestones 2-4 below are still open.
 
 A read-only validator that runs **on an AVD session host or Windows 365 Cloud PC** and
 reports, feature by feature, whether that feature can work on this machine right now, and

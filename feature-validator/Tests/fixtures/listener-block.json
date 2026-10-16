@@ -1,0 +1,9 @@
+{
+ "_about": "Policy clean, but clipboard disabled on the RDP-Tcp listener directly.",
+ "Platform": "AVD",
+ "Probes": {
+  "Service|TermService": "Running",
+  "Service|UmRdpService": "Running",
+  "Registry|HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp|fDisableClip": 1
+ }
+}

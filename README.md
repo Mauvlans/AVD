@@ -45,6 +45,18 @@ changed." Note that Windows 365 provisioning policies contain no redirection set
 all — W365 is Intune/GPO only. Ships with a 17-case offline test suite pinning the
 "Do not allow…" policy inversion. See the folder README for the full limits list.
 
+### `feature-validator/`
+Read-only **feature validator** for AVD session hosts and Windows 365 Cloud PCs. Run it on
+the host; it reports per feature whether it can work and what blocks it, colour-coded:
+**FAIL** red (can't work), **WARN** yellow (degraded), PASS green. Checks are data
+(`checks/*.psd1`), so new features don't touch the engine. Today: redirection, including the
+W365 secure-by-default block and listener-level blocks that Intune reports miss. Roadmap in
+`PLAN.md`.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Invoke-FeatureValidator.ps1
+```
+
 ### `context-redirection-check/`
 Read-only check you run **inside the session** to show which redirections (clipboard,
 drives, printers, PnP/USB) it actually received, and whether device policy is blocking

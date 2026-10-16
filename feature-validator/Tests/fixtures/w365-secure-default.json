@@ -1,0 +1,12 @@
+{
+ "_about": "Fresh W365 Cloud PC: secure-by-default blocks all four redirections.",
+ "Platform": "W365",
+ "Probes": {
+  "Service|TermService": "Running",
+  "Service|UmRdpService": "Running",
+  "Registry|HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services|fDisableClip": 1,
+  "Registry|HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services|fDisableCdm": 1,
+  "Registry|HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services|fDisableCpm": 1,
+  "Registry|HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services|fDisablePNPRedir": 1
+ }
+}

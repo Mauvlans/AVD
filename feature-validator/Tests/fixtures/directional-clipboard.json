@@ -1,0 +1,10 @@
+{
+ "_about": "Allowed, but host-to-client clipboard disabled: warnings only.",
+ "Platform": "AVD",
+ "Probes": {
+  "Service|TermService": "Running",
+  "Service|UmRdpService": "Running",
+  "Registry|HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services|SCClipLevel": 0,
+  "Registry|HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services|CSClipLevel": 4
+ }
+}

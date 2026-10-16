@@ -1,0 +1,12 @@
+{
+ "_about": "Redirection explicitly allowed (policy = Disabled -> 0).",
+ "Platform": "W365",
+ "Probes": {
+  "Service|TermService": "Running",
+  "Service|UmRdpService": "Running",
+  "Registry|HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services|fDisableClip": 0,
+  "Registry|HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services|fDisableCdm": 0,
+  "Registry|HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services|fDisableCpm": 0,
+  "Registry|HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services|fDisablePNPRedir": 0
+ }
+}

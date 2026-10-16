@@ -1,0 +1,7 @@
+{
+ "_about": "TermService stopped, UmRdpService missing.",
+ "Platform": "AVD",
+ "Probes": {
+  "Service|TermService": "Stopped"
+ }
+}

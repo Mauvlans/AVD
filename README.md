@@ -53,8 +53,10 @@ the host; it reports per feature whether it can work and what blocks it, colour-
 W365 secure-by-default block and listener-level blocks that Intune reports miss. Roadmap in
 `PLAN.md`.
 
+Single self-contained file in `feature-validator/dist/`, so you can copy it or run it straight from GitHub:
+
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Invoke-FeatureValidator.ps1
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Mauvlans/AVD/main/feature-validator/dist/Invoke-FeatureValidator.ps1)))
 ```
 
 ### `context-redirection-check/`

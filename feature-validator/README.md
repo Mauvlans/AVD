@@ -4,9 +4,32 @@ Read-only validator for **Azure Virtual Desktop session hosts** and **Windows 36
 PCs**. Run it on the host. It reports, feature by feature, whether that feature can work
 there and, if not, what's blocking it, with the fix and the Microsoft Learn page.
 
+## Run it: single file (recommended)
+
+[`dist/Invoke-FeatureValidator.ps1`](dist/Invoke-FeatureValidator.ps1) is one self-contained
+script with the engine and every check built in. Copy it anywhere: a Cloud PC, an Intune
+remediation, Azure Run Command, a ticket.
+
+```powershell
+# Downloaded file - supports every parameter and sets the process exit code
+powershell -ExecutionPolicy Bypass -File .\Invoke-FeatureValidator.ps1
+
+# Straight from GitHub, nothing saved to disk - parameters work, your window stays open
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Mauvlans/AVD/main/feature-validator/dist/Invoke-FeatureValidator.ps1))) -ShowSkipped
+$LASTEXITCODE   # 0 = no FAIL/ERROR, 1 = at least one
+```
+
+Use the `[scriptblock]::Create` form rather than `irm ... | iex`: it accepts parameters and
+runs in its own scope, so it doesn't leave the validator's variables in your session.
+
+## Run it: from the repo
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Invoke-FeatureValidator.ps1
 ```
+
+Same behaviour; loads `lib/Engine.ps1` and `checks/*.psd1` from disk. Use this while
+developing checks.
 
 ![Sample output](docs-sample-output.png)
 
@@ -93,15 +116,32 @@ or `Present`), `Process`, `Cloud`. A missing value/service/file is `$null`, so
 isn't a block. The catalog is validated at load. A malformed check stops the run rather
 than silently passing.
 
+## Building the single file
+
+`dist/` is generated. Never edit it by hand. After changing `lib/`, `checks/` or
+`Invoke-FeatureValidator.ps1`:
+
+```powershell
+pwsh -File .\build\Build-Standalone.ps1
+pwsh -File .\Tests\Test-FeatureValidator.ps1
+```
+
+The build only inlines catalog files that load through `Import-PowerShellDataFile`
+(data-only: no commands or variables), checks the result parses, and writes UTF-8 with a BOM
+so Windows PowerShell 5.1 reads it correctly. The tests fail if `dist/` is stale (engine,
+any check file or the main script out of sync), so you can't forget to rebuild.
+
 ## Tests
 
 ```powershell
 pwsh -File .\Tests\Test-FeatureValidator.ps1
 ```
 
-50 offline tests covering catalog schema, expectation logic (including the inverted
-"Do not allow… = 1 means blocked"), status → colour/exit-code mapping, and five
-end-to-end fixture scenarios in `Tests/fixtures/`. A deliberately inverted `NotEqual`
+73 offline tests covering catalog schema, expectation logic (including the inverted
+"Do not allow… = 1 means blocked"), status → colour/exit-code mapping, five end-to-end
+fixture scenarios in `Tests/fixtures/` run against **both** the repo script and the single
+file, dist freshness, and the scriptblock form (doesn't close the host, sets
+`$LASTEXITCODE`). A deliberately inverted `NotEqual`
 makes 13 of them fail, so they do catch the mistake they exist for.
 
 **What they don't prove:** that a real host exposes these values where the catalog

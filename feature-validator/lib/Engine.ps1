@@ -19,16 +19,27 @@ function Import-CheckCatalog {
        a bad check must fail loudly at load time, never silently report Pass. #>
     param([Parameter(Mandatory)][string]$Path)
 
+    $sources = @(foreach ($file in (Get-ChildItem -Path $Path -Filter '*.psd1' | Sort-Object Name)) {
+        @{ Name = $file.Name; Data = (Import-PowerShellDataFile -Path $file.FullName) }
+    })
+    return Resolve-CheckCatalog -Source $sources
+}
+
+function Resolve-CheckCatalog {
+    <# Validates catalog data from any source: psd1 files (repo) or the catalog embedded in the
+       single-file build. Both paths go through here, so both get identical validation. #>
+    param([Parameter(Mandatory)][object[]]$Source)
+
     $checks = New-Object System.Collections.Generic.List[object]
     $ids = @{}
-    foreach ($file in (Get-ChildItem -Path $Path -Filter '*.psd1' | Sort-Object Name)) {
-        $data = Import-PowerShellDataFile -Path $file.FullName
-        if (-not $data.ContainsKey('Checks')) { throw "$($file.Name): top-level 'Checks' key missing" }
+    foreach ($src in $Source) {
+        $data = $src.Data
+        if (-not $data.ContainsKey('Checks')) { throw "$($src.Name): top-level 'Checks' key missing" }
         foreach ($c in $data.Checks) {
             $problems = Test-CheckDefinition -Check $c
-            if ($problems) { throw "$($file.Name) [$($c.Id)]: $($problems -join '; ')" }
-            if ($ids.ContainsKey($c.Id)) { throw "Duplicate check Id '$($c.Id)' in $($file.Name) and $($ids[$c.Id])" }
-            $ids[$c.Id] = $file.Name
+            if ($problems) { throw "$($src.Name) [$($c.Id)]: $($problems -join '; ')" }
+            if ($ids.ContainsKey($c.Id)) { throw "Duplicate check Id '$($c.Id)' in $($src.Name) and $($ids[$c.Id])" }
+            $ids[$c.Id] = $src.Name
             $checks.Add($c)
         }
     }

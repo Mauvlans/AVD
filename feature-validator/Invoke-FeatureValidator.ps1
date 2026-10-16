@@ -47,7 +47,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$script:ToolVersion = '0.1.0'
+#region ENGINE  (the single-file build replaces this region with lib\Engine.ps1 + the embedded catalog)
 . (Join-Path (Join-Path $PSScriptRoot 'lib') 'Engine.ps1')
+$script:EmbeddedCatalog = $null
+#endregion ENGINE
 
 $fx = $null
 if ($Fixture) {
@@ -57,9 +61,10 @@ if ($Fixture) {
     if ($raw.Probes) { foreach ($p in $raw.Probes.PSObject.Properties) { $fx.Probes[$p.Name] = $p.Value } }
 }
 
-$checks = Import-CheckCatalog -Path (Join-Path $PSScriptRoot 'checks')
+if ($script:EmbeddedCatalog) { $checks = Resolve-CheckCatalog -Source $script:EmbeddedCatalog }
+else { $checks = Import-CheckCatalog -Path (Join-Path $PSScriptRoot 'checks') }
 if ($Feature) { $checks = @($checks | Where-Object { $Feature -contains $_.Feature }) }
-if (-not $checks) { Write-Host "No checks match -Feature $($Feature -join ',')" -ForegroundColor Yellow; exit 1 }
+if (-not $checks) { Write-Host "No checks match -Feature $($Feature -join ',')" -ForegroundColor Yellow; return }
 
 $hostPlatform = $Platform
 if ($Platform -eq 'Auto') { $hostPlatform = Get-HostPlatform -Fixture $fx }
@@ -73,7 +78,7 @@ if ($hostPlatform -eq 'Unknown') {
 
 $report = [ordered]@{
     Tool      = 'feature-validator'
-    Version   = '0.1.0'
+    Version   = $script:ToolVersion
     Timestamp = (Get-Date).ToString('o')
     Computer  = $env:COMPUTERNAME
     Platform  = $hostPlatform
@@ -95,4 +100,8 @@ New-Item -ItemType Directory -Path (Split-Path $OutputPath) -Force | Out-Null
 $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $OutputPath -Encoding UTF8
 Write-Host "JSON: $OutputPath`n"
 
-exit (Get-ExitCode -Results $results)
+$exitCode = Get-ExitCode -Results $results
+# Run as a file: set the process exit code. Run via irm | iex or a scriptblock: never call
+# exit (it would close the user's PowerShell window); expose the result in $LASTEXITCODE.
+if ($PSCommandPath) { exit $exitCode }
+$global:LASTEXITCODE = $exitCode

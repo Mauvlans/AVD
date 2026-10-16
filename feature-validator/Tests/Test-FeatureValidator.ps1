@@ -84,46 +84,74 @@ Assert-Equal 'exit 1 on any Fail'  1 (Get-ExitCode -Results @((& $mk 'Pass'), (&
 Assert-Equal 'exit 1 on any Error' 1 (Get-ExitCode -Results @((& $mk 'Warn'), (& $mk 'Error')))
 Assert-Equal 'Fail and Warn use different colours' $true ($script:StatusStyle.Fail.Color -ne $script:StatusStyle.Warn.Color)
 
-Write-Host "`nEnd-to-end against fixtures" -ForegroundColor Cyan
-$script = Join-Path $root 'Invoke-FeatureValidator.ps1'
+Write-Host "`nSingle-file build is current" -ForegroundColor Cyan
+$dist = Join-Path (Join-Path $root 'dist') 'Invoke-FeatureValidator.ps1'
+Assert-Equal 'dist file exists (run build/Build-Standalone.ps1)' $true (Test-Path $dist)
+$distText = ''
+if (Test-Path $dist) { $distText = Get-Content -Raw -LiteralPath $dist }
+$norm = { param($t) ($t -replace "`r`n", "`n").Trim() }
+Assert-Equal 'dist contains current lib/Engine.ps1' $true ((& $norm $distText).Contains((& $norm (Get-Content -Raw (Join-Path (Join-Path $root 'lib') 'Engine.ps1')))))
+foreach ($f in (Get-ChildItem (Join-Path $root 'checks') -Filter *.psd1)) {
+    Assert-Equal "dist contains current checks/$($f.Name)" $true ((& $norm $distText).Contains((& $norm (Get-Content -Raw $f.FullName))))
+}
+$mainBody = (& $norm (Get-Content -Raw (Join-Path $root 'Invoke-FeatureValidator.ps1'))) -replace '(?s)#region ENGINE.*?#endregion ENGINE', ''
+$distBody = (& $norm $distText) -replace '(?s)#region ENGINE.*?#endregion ENGINE', ''
+Assert-Equal 'dist main body matches Invoke-FeatureValidator.ps1' $true ($mainBody -eq $distBody)
+Assert-Equal 'dist does not dot-source lib/Engine.ps1' $false ($distText -match 'Join-Path \$PSScriptRoot ''lib''')
+
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("fv-test-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $tmp | Out-Null
-function Invoke-Scenario([string]$Name) {
-    $out = Join-Path $tmp "$Name.json"
+$shell = (Get-Process -Id $PID).Path
+function Invoke-Scenario([string]$Script, [string]$Name) {
+    $out = Join-Path $tmp ("{0}-{1}.json" -f $Name, [guid]::NewGuid())
     $fixture = Join-Path (Join-Path $PSScriptRoot 'fixtures') "$Name.json"
-    $shell = (Get-Process -Id $PID).Path
-    & $shell -NoProfile -File $script -Fixture $fixture -OutputPath $out -NoColor *> $null
+    & $shell -NoProfile -File $Script -Fixture $fixture -OutputPath $out -NoColor *> $null
     $code = $LASTEXITCODE
     $rep = Get-Content $out -Raw | ConvertFrom-Json
     return @{ Code = $code; Report = $rep }
 }
 function Get-StatusOf($rep, $id) { ($rep.Results | Where-Object Id -eq $id).Status }
 
-$s = Invoke-Scenario 'w365-secure-default'
-Assert-Equal 'secure-default: exit 1'            1 $s.Code
-Assert-Equal 'secure-default: 4 Fail'            4 $s.Report.Summary.Fail
-Assert-Equal 'secure-default: REDIR-001 Fail'    'Fail' (Get-StatusOf $s.Report 'REDIR-001')
-Assert-Equal 'secure-default: platform W365'     'W365' $s.Report.Platform
+$targets = [ordered]@{ 'repo' = (Join-Path $root 'Invoke-FeatureValidator.ps1'); 'single-file' = $dist }
+foreach ($t in $targets.Keys) {
+    Write-Host "`nEnd-to-end against fixtures ($t)" -ForegroundColor Cyan
+    $script = $targets[$t]
 
-$s = Invoke-Scenario 'healthy'
-Assert-Equal 'healthy: exit 0'                   0 $s.Code
-Assert-Equal 'healthy: no Fail'                  0 $s.Report.Summary.Fail
-Assert-Equal 'healthy: no Warn'                  0 $s.Report.Summary.Warn
-Assert-Equal 'healthy: cloud checks skipped'     3 $s.Report.Summary.Skipped
+    $s = Invoke-Scenario $script 'w365-secure-default'
+    Assert-Equal "[$t] secure-default: exit 1"            1 $s.Code
+    Assert-Equal "[$t] secure-default: 4 Fail"            4 $s.Report.Summary.Fail
+    Assert-Equal "[$t] secure-default: REDIR-001 Fail"    'Fail' (Get-StatusOf $s.Report 'REDIR-001')
+    Assert-Equal "[$t] secure-default: platform W365"     'W365' $s.Report.Platform
 
-$s = Invoke-Scenario 'directional-clipboard'
-Assert-Equal 'directional: exit 0 (warn only)'   0 $s.Code
-Assert-Equal 'directional: REDIR-005 Warn'       'Warn' (Get-StatusOf $s.Report 'REDIR-005')
-Assert-Equal 'directional: REDIR-006 Pass'       'Pass' (Get-StatusOf $s.Report 'REDIR-006')
+    $s = Invoke-Scenario $script 'healthy'
+    Assert-Equal "[$t] healthy: exit 0"                   0 $s.Code
+    Assert-Equal "[$t] healthy: no Fail"                  0 $s.Report.Summary.Fail
+    Assert-Equal "[$t] healthy: no Warn"                  0 $s.Report.Summary.Warn
+    Assert-Equal "[$t] healthy: cloud checks skipped"     3 $s.Report.Summary.Skipped
 
-$s = Invoke-Scenario 'listener-block'
-Assert-Equal 'listener: exit 1'                  1 $s.Code
-Assert-Equal 'listener: REDIR-001 Pass (policy clean)' 'Pass' (Get-StatusOf $s.Report 'REDIR-001')
-Assert-Equal 'listener: REDIR-007 Fail'          'Fail' (Get-StatusOf $s.Report 'REDIR-007')
+    $s = Invoke-Scenario $script 'directional-clipboard'
+    Assert-Equal "[$t] directional: exit 0 (warn only)"   0 $s.Code
+    Assert-Equal "[$t] directional: REDIR-005 Warn"       'Warn' (Get-StatusOf $s.Report 'REDIR-005')
+    Assert-Equal "[$t] directional: REDIR-006 Pass"       'Pass' (Get-StatusOf $s.Report 'REDIR-006')
 
-$s = Invoke-Scenario 'termservice-stopped'
-Assert-Equal 'termservice: REDIR-009 Fail'       'Fail' (Get-StatusOf $s.Report 'REDIR-009')
-Assert-Equal 'termservice: REDIR-010 Fail (missing)' 'Fail' (Get-StatusOf $s.Report 'REDIR-010')
+    $s = Invoke-Scenario $script 'listener-block'
+    Assert-Equal "[$t] listener: exit 1"                  1 $s.Code
+    Assert-Equal "[$t] listener: REDIR-001 Pass (policy clean)" 'Pass' (Get-StatusOf $s.Report 'REDIR-001')
+    Assert-Equal "[$t] listener: REDIR-007 Fail"          'Fail' (Get-StatusOf $s.Report 'REDIR-007')
+
+    $s = Invoke-Scenario $script 'termservice-stopped'
+    Assert-Equal "[$t] termservice: REDIR-009 Fail"       'Fail' (Get-StatusOf $s.Report 'REDIR-009')
+    Assert-Equal "[$t] termservice: REDIR-010 Fail (missing)" 'Fail' (Get-StatusOf $s.Report 'REDIR-010')
+}
+
+Write-Host "`nSingle file via scriptblock (irm | iex style)" -ForegroundColor Cyan
+$fx = Join-Path (Join-Path $PSScriptRoot 'fixtures') 'w365-secure-default.json'
+$out = Join-Path $tmp 'sb.json'
+$probe = "& ([scriptblock]::Create([IO.File]::ReadAllText('$dist'))) -Fixture '$fx' -OutputPath '$out' -NoColor *> `$null; 'alive'; `$LASTEXITCODE"
+$res = @(& $shell -NoProfile -Command $probe)
+Assert-Equal 'scriptblock run does not exit the host' 'alive' $res[0]
+Assert-Equal 'scriptblock run sets $LASTEXITCODE = 1' '1' $res[1]
+$res2 = @(& $shell -NoProfile -Command $probe2)
 
 Remove-Item -Recurse -Force $tmp
 

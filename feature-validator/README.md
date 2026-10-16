@@ -78,6 +78,10 @@ elevated, or `-OutputPath`).
   Intune and GPO reports won't show.
 - `REDIR-009/010`: TermService running, UmRdpService present.
 
+Real-host validation: **Windows 365 Cloud PC, 2026-10-16**. All 10 checks PASS, platform detected
+as W365, and the policy values read back as `0` (explicitly allowed, not missing). Still needed: a
+negative run on a secure-by-default Cloud PC (expect REDIR-001..004 FAIL) and an AVD session host.
+
 **Context-based redirection** (cloud, `-Connect`, not built yet): auth context
 published, CA policy targets it, Windows Cloud Login sign-ins actually request it.
 

@@ -8,6 +8,7 @@ param(
     [Parameter(Mandatory)][string]$HostPoolResourceGroup,
     [Parameter(Mandatory)][string]$HostPoolName,
     [Parameter(Mandatory)][string]$ArcResourceGroup,
+    [string]$ArcLocation,
     [string]$ArcOnboardingScriptPath,
     [ValidateRange(1,60)][int]$TimeoutMinutes = 25
 )
@@ -25,7 +26,7 @@ if (@($guest).Count -ne 1 -or -not $guest.ComputerName -or -not $guest.Fqdn) { t
 if (-not $guest.DomainJoined) { throw 'Remote host is not AD domain joined. This v1 flow requires AD join; registration stopped.' }
 if ($guest.Fqdn -notmatch '^[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z0-9.-]+$') { throw 'Remote host FQDN is invalid; registration stopped.' }
 
-foreach ($command in 'Get-AzContext','Get-AzWvdHostPool','Get-AzWvdSessionHost','Get-AzConnectedMachine','Get-AzConnectedMachineExtension','Get-AzRoleAssignment','New-AzWvdRegistrationInfo','New-AzConnectedMachineExtension') {
+foreach ($command in 'Get-AzContext','Get-AzWvdHostPool','Get-AzWvdSessionHost','Get-AzConnectedMachine','Get-AzConnectedMachineExtension','Connect-AzConnectedMachine','Get-AzRoleAssignment','New-AzWvdRegistrationInfo','New-AzConnectedMachineExtension') {
     if (-not (Get-Command $command -ErrorAction SilentlyContinue)) { throw "Missing Azure PowerShell command $command. Install Az.Accounts, Az.Resources, Az.DesktopVirtualization, and Az.ConnectedMachine on the operator machine." }
 }
 $context = Get-AzContext
@@ -44,10 +45,20 @@ if (-not $access) { throw "Host pool identity lacks a verified Reader/Contributo
 $machine = Get-AzConnectedMachine -Name $guest.ComputerName -ResourceGroupName $ArcResourceGroup -ErrorAction SilentlyContinue
 if ($machine -and -not $guest.ArcAgentInstalled) { throw 'Arc agent is absent on the guest even though Azure has a matching machine record; refusing to act on a potentially stale Arc identity.' }
 if (-not $machine -or $machine.Status -ne 'Connected') {
-    if (-not $ArcOnboardingScriptPath) { throw 'Arc machine is not Connected. Supply a reviewed Arc onboarding script with -ArcOnboardingScriptPath or onboard the host separately; registration stopped.' }
-    if (-not $PSCmdlet.ShouldProcess($ComputerName, 'Run operator-supplied Arc onboarding script over remoting')) { return }
-    # Never print the onboarding script, its output, or secrets to the console.
-    Invoke-Command @remote -FilePath $ArcOnboardingScriptPath | Out-Null
+    if ($machine) { throw "Arc machine already exists with status $($machine.Status). Repair that connection rather than creating a second one." }
+    if (-not $ArcOnboardingScriptPath -and -not $ArcLocation) { throw 'Arc machine is not Connected. Supply -ArcLocation to onboard it using your Azure PowerShell identity, or -ArcOnboardingScriptPath for a reviewed custom script.' }
+    if (-not $PSCmdlet.ShouldProcess($ComputerName, 'Install Azure Connected Machine agent and register with Azure Arc over PowerShell remoting')) { return }
+    if ($ArcOnboardingScriptPath) {
+        # Legacy override: operator owns and reviews this external script. Never print its contents.
+        Invoke-Command @remote -FilePath $ArcOnboardingScriptPath | Out-Null
+    } else {
+        # Microsoft's Az.ConnectedMachine cmdlet obtains auth from the operator's
+        # Azure context; no service-principal secret is passed to the guest by us.
+        $session = New-PSSession @remote
+        try {
+            Connect-AzConnectedMachine -Name $guest.ComputerName -ResourceGroupName $ArcResourceGroup -Location $ArcLocation -SubscriptionId ([string]$SubscriptionId) -PSSession $session | Out-Null
+        } finally { if ($session) { Remove-PSSession -Session $session } }
+    }
     $guest = Invoke-Command @remote -FilePath (Join-Path $PSScriptRoot 'Test-AvdHybridHost.ps1')
     if (-not $guest.ArcAgentInstalled) { throw 'Arc onboarding returned but the agent is absent on the guest.' }
     $machine = Get-AzConnectedMachine -Name $guest.ComputerName -ResourceGroupName $ArcResourceGroup

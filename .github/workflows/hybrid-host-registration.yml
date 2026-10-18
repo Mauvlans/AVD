@@ -1,0 +1,21 @@
+name: Hybrid host registration tests
+on:
+  push:
+    paths:
+      - 'hybrid-host-registration/**'
+      - '.github/workflows/hybrid-host-registration.yml'
+  pull_request:
+    paths:
+      - 'hybrid-host-registration/**'
+      - '.github/workflows/hybrid-host-registration.yml'
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Guest preflight tests
+        shell: pwsh
+        run: ./hybrid-host-registration/Tests/Test-HostPreflight.ps1
+      - name: Registration tests (mocked Azure and remoting)
+        shell: pwsh
+        run: ./hybrid-host-registration/Tests/Test-Registration.ps1

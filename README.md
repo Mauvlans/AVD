@@ -10,6 +10,13 @@ install unless a tool says otherwise.
 
 ## Contents
 
+### `hybrid-host-registration/`
+Post-boot AVD Hybrid session-host registration. A read-only guest probe runs over
+WinRM or PowerShell SSH remoting; an operator-side script verifies the existing
+host pool, managed identity, and Arc machine, applies the AVD Arc extension,
+then waits for the host to become **Available** in the pool. VM provisioning
+and host-pool creation remain outside this folder. See its [README](hybrid-host-registration/README.md).
+
 ### `drive-redirection-diagnostic/`
 Read-only PowerShell diagnostic for the classic *"drive redirection is configured
 correctly but drives never appear / RemoteApp just spins"* case. Run it on the **session
